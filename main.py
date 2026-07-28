@@ -1,18 +1,22 @@
-"""知识库问答助手 v1：挑出相关笔记塞进 Prompt，让 LLM 带出处回答。
+"""知识库问答助手 v2：结构化出处——LLM 按 JSON Schema 回答，Pydantic 校验，不合格喂回重试。
 
 用法：
     uv run main.py        # 进入问答循环，输入 q 退出
 """
 
 import asyncio
+import json
 import os
+import re
 
 from dotenv import load_dotenv
+from pydantic import ValidationError
 
-from llm import stream_answer
+from llm import complete
+from models import Answer
 from vault import load_notes, pick_notes
 
-load_dotenv()  # 把 .env 加载进 os.environ（见笔记《0.02 环境变量与配置》）
+load_dotenv()
 
 VAULT_DIR = os.path.expanduser(
     os.environ.get("VAULT_DIR", "~/Documents/Obsidian Vault/Marauder'sMap/Library")
@@ -20,14 +24,24 @@ VAULT_DIR = os.path.expanduser(
 
 SYSTEM_PROMPT = """你是我的私人知识库助手。只根据下面提供的笔记内容回答问题。
 
-规则：
-1. 回答末尾用「出处：《笔记名》」标注答案来自哪几篇笔记
-2. 笔记里没写的内容，直接说「笔记里没写」，禁止编造
-3. 用中文回答，简洁清楚
+你必须只输出一个 JSON 对象——不要 markdown 代码块，不要任何多余文字——符合这个 JSON Schema：
+{schema}
+
+要求：
+1. sources 只能填下面笔记内容里出现过的笔记名；答案没有依据时留空列表
+2. 笔记里没写的内容，在 answer 里直说「笔记里没写」，禁止编造
+3. answer 用中文，简洁清楚
 
 以下是笔记内容：
 
 {context}"""
+
+MAX_RETRIES = 3
+
+
+def strip_fences(text: str) -> str:
+    """模型经常不听话地包一层 ```json 代码块，先剥掉再解析。"""
+    return re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
 
 
 async def ask(question: str, notes: dict[str, str]) -> None:
@@ -35,13 +49,45 @@ async def ask(question: str, notes: dict[str, str]) -> None:
     if not picked:
         print("没找到相关笔记，换个问法试试？\n")
         return
-    print(f"[参考笔记] {'、'.join(picked)}\n")
+    print(f"[参考笔记] {'、'.join(picked)}")
 
     context = "\n\n".join(f"# 《{name}》\n{text}" for name, text in picked.items())
-    system_prompt = SYSTEM_PROMPT.format(context=context)
-    async for piece in stream_answer(system_prompt, question):
-        print(piece, end="", flush=True)
-    print("\n")
+    schema = json.dumps(Answer.model_json_schema(), ensure_ascii=False)  # ensure_ascii=False：让中文 description 原样进 Prompt
+    system_prompt = SYSTEM_PROMPT.format(schema=schema, context=context)
+
+    prompt = question
+    for attempt in range(1, MAX_RETRIES + 1):
+        print(f"（思考中，第 {attempt} 次）", flush=True)
+        raw = await complete(system_prompt, prompt)
+
+        # 第一层验收：形状对不对（schema 校验，不对会抛 ValidationError）
+        try:
+            answer = Answer.model_validate_json(strip_fences(raw))
+        except ValidationError as e:
+            prompt = (
+                f"{question}\n\n"
+                f"你上一次的输出不是合法的 JSON 或不符合 Schema，校验错误如下：\n{e}\n"
+                f"请修正后重新输出，只输出 JSON 对象本身。"
+            )
+            continue
+
+        # 第二层验收：出处是不是真的存在（业务规则校验，防「幻觉出处」）
+        fake_sources = [s for s in answer.sources if s not in picked]
+        if fake_sources:
+            prompt = (
+                f"{question}\n\n"
+                f"你上一次填的出处 {fake_sources} 并不在提供的笔记里。"
+                f"sources 只能从这些笔记名里选：{list(picked)}。请重新输出 JSON。"
+            )
+            continue
+
+        print(f"\n{answer.answer}")
+        if answer.sources:
+            print("\n出处：" + "、".join(f"《{s}》" for s in answer.sources))
+        print()
+        return
+
+    print(f"重试 {MAX_RETRIES} 次都没拿到合格的回答，这题先跳过。\n")
 
 
 async def main() -> None:
@@ -60,4 +106,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())  # JS 的事件循环是内建的，Python 要显式启动——就是这一行
+    asyncio.run(main())

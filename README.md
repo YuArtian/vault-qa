@@ -25,8 +25,9 @@ uv run main.py
 | 文件 | 干什么 | 学到的概念 |
 |------|--------|-----------|
 | `vault.py` | 读全部笔记 + 关键词计分挑出相关的几篇 | `pathlib.rglob`、dict、推导式、IDF 权重思想、上下文预算 |
-| `llm.py` | LLM 后端适配层（claude / openai 双后端） | async generator、`yield`、多 Provider 适配器模式、模块顶层代码的 import 陷阱 |
-| `main.py` | 问答循环：挑笔记 → 拼 Prompt → 流式输出 | `asyncio.run`、`async for`、f-string、`os.environ` + dotenv、System Prompt 设计 |
+| `models.py` | 回答的数据模型（v2 新增） | Pydantic `BaseModel` / `Field`、schema 即约束（≈ Zod） |
+| `llm.py` | LLM 后端适配层（claude / openai 双后端） | 多 Provider 适配器模式、模块顶层代码的 import 陷阱 |
+| `main.py` | 问答循环：挑笔记 → 要求 JSON → 校验 → 不合格喂回重试 | `asyncio.run`、Structured Output、`ValidationError` 自纠循环、双层验收（形状 + 业务规则） |
 
 ## 踩过的坑（真实记录）
 
@@ -37,7 +38,7 @@ uv run main.py
 ## 升级路径（对应《AI开发学习计划》第 0.3 节）
 
 - [x] v1 关键词挑笔记 + 塞 Prompt 问答（LLM 应用基础）
-- [ ] v2 答案带结构化出处（Pydantic + Structured Output）
+- [x] v2 答案带结构化出处（Pydantic + Structured Output）
 - [ ] v3 笔记多了挑不准 → 向量检索（Embedding + pgvector）
 - [ ] v4 做成 FastAPI 接口，手机上能问（Web 服务开发）
 - [ ] v5 评估答得准不准（LLM-as-Judge + golden set）
