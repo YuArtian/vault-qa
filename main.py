@@ -1,7 +1,8 @@
-"""知识库问答助手 v2：结构化出处——LLM 按 JSON Schema 回答，Pydantic 校验，不合格喂回重试。
+"""知识库问答助手 v3：向量检索——按语义而不是字面挑笔记。
 
 用法：
-    uv run main.py        # 进入问答循环，输入 q 退出
+    uv run main.py                    # 默认向量检索（首次启动会下载模型并编码笔记）
+    RETRIEVER=keyword uv run main.py  # 切回 v1 的关键词检索（对比用 baseline）
 """
 
 import asyncio
@@ -44,8 +45,8 @@ def strip_fences(text: str) -> str:
     return re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip())
 
 
-async def ask(question: str, notes: dict[str, str]) -> None:
-    picked = pick_notes(question, notes)
+async def ask(question: str, retrieve) -> None:
+    picked = retrieve(question)
     if not picked:
         print("没找到相关笔记，换个问法试试？\n")
         return
@@ -90,9 +91,23 @@ async def ask(question: str, notes: dict[str, str]) -> None:
     print(f"重试 {MAX_RETRIES} 次都没拿到合格的回答，这题先跳过。\n")
 
 
+def build_retriever(notes: dict[str, str]):
+    """返回一个「问题 → {笔记名: 内容}」的函数。检索策略在这里切换，ask 不感知差异。"""
+    if os.environ.get("RETRIEVER", "vector") == "keyword":
+        print("[检索] 关键词（v1 baseline）")
+        return lambda q: pick_notes(q, notes)
+
+    from retrieval import VectorIndex, pick_notes_vector  # 重依赖，用到才 import
+
+    print("[检索] 向量（bge-small-zh，本地推理）")
+    index = VectorIndex(notes)
+    return lambda q: pick_notes_vector(index, q)
+
+
 async def main() -> None:
     notes = load_notes(VAULT_DIR)
     print(f"已加载 {len(notes)} 篇笔记 ← {VAULT_DIR}")
+    retrieve = build_retriever(notes)
     print("输入问题开始提问，q 退出\n")
     while True:
         try:
@@ -102,7 +117,7 @@ async def main() -> None:
         if question in ("q", "quit", "exit"):
             break
         if question:
-            await ask(question, notes)
+            await ask(question, retrieve)
 
 
 if __name__ == "__main__":

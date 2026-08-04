@@ -6,6 +6,8 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "claude-agent-sdk>=0.2.126",
+    "numpy>=2.5.1",
     "openai>=2.48.0",
     "python-dotenv>=1.2.2",
+    "sentence-transformers>=5.6.1",
 ]

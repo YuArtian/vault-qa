@@ -30,6 +30,8 @@ uv run main.py
 | `models.py` | 回答的数据模型（v2 新增） | Pydantic `BaseModel` / `Field`、schema 即约束（≈ Zod） |
 | `llm.py` | LLM 后端适配层（claude / openai 双后端） | 多 Provider 适配器模式、模块顶层代码的 import 陷阱 |
 | `main.py` | 问答循环：挑笔记 → 要求 JSON → 校验 → 不合格喂回重试 | `asyncio.run`、Structured Output、`ValidationError` 自纠循环、双层验收（形状 + 业务规则） |
+| `retrieval.py` | 向量检索（v3 新增）：分块 → 本地 Embedding → 余弦相似度 | 语义检索原理、分块与 overlap、归一化点积、Embedding 缓存、NumPy 矩阵运算 |
+| `compare.py` | 关键词 vs 向量肩并肩对比 | 用自己的翻车账本当验收测试集（回归测试思维） |
 
 ## 踩过的坑（真实记录）
 
@@ -41,7 +43,7 @@ uv run main.py
 
 - [x] v1 关键词挑笔记 + 塞 Prompt 问答（LLM 应用基础）
 - [x] v2 答案带结构化出处（Pydantic + Structured Output）
-- [ ] v3 笔记多了挑不准 → 向量检索（Embedding + pgvector）
+- [x] v3 关键词挑不准 → 向量检索（本地 Embedding + NumPy 余弦相似度；88 篇笔记还轮不到 pgvector 出场）
 - [ ] v4 做成 FastAPI 接口，手机上能问（Web 服务开发）
 - [ ] v5 评估答得准不准（LLM-as-Judge + golden set）
 - [ ] v6 让它自己决定翻哪篇笔记（Tool Calling + Agent）
