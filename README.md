@@ -10,7 +10,7 @@
 |------|------|------|
 | v1 | 关键词检索问答 | [docs/v1-学习总结.md](docs/v1-学习总结.md) |
 | v2 | 结构化出处（Pydantic + Structured Output） | [docs/v2-学习总结.md](docs/v2-学习总结.md) |
-| v3 | 向量检索（RAG） | 待开始 |
+| v3 | 向量检索（本地 Embedding + 语义匹配） | [docs/v3-学习总结.md](docs/v3-学习总结.md) |
 | v4 | FastAPI 接口 | 待开始 |
 
 ## 跑起来
